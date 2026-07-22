@@ -20,6 +20,7 @@ from typing import Optional, Tuple, List
 from PIL import Image
 
 from .scheduler import DDIMScheduler
+from diffusers import DDIMScheduler as DiffusersDDIMScheduler
 from . import utils
 
 # Patch SSL verification for HuggingFace downloads
@@ -94,7 +95,15 @@ class SDEditPipeline:
         print("[SDEdit] Models loaded successfully.")
     
     def _get_scheduler(self, num_inference_steps: int = 50):
-        """Create a fresh DDIM scheduler for each run."""
+        """Get or create a scheduler for the reverse diffusion process."""
+        sched = DiffusersDDIMScheduler.from_pretrained(
+            self.model_id, subfolder="scheduler"
+        )
+        sched.set_timesteps(num_inference_steps)
+        return sched
+
+    def _get_scheduler_scratch(self, num_inference_steps: int = 50):
+        """Create a hand-rolled DDIM scheduler (for testing)."""
         return DDIMScheduler(
             num_train_timesteps=1000,
             beta_start=0.00085,
@@ -232,24 +241,24 @@ class SDEditPipeline:
         
         # Create scheduler
         scheduler = self._get_scheduler(num_inference_steps)
-        
+
         # --- Step 1: Encode input image to latent space ---
         print("[SDEdit] Encoding input image to latent space...")
         latents = self._encode_image(image, size=size)  # z₀: [1, 4, 64, 64]
-        
+
         # --- Step 2: Pick timestep t₀ based on strength ---
         # strength maps to [0, T-1], where T is total training timesteps
         # Higher strength = noisier starting point = more editing freedom
-        timesteps = scheduler.get_timesteps(num_inference_steps)
-        t_start = max(0, len(timesteps) - int(len(timesteps) * strength))
+        timesteps = scheduler.timesteps.tolist()
+        t_start = max(0, len(scheduler.timesteps) - int(len(scheduler.timesteps) * strength))
         edit_timesteps = timesteps[t_start:]
-        
+
         if len(edit_timesteps) == 0:
             print("[SDEdit] Strength = 0, returning input image unchanged.")
             return image
         
         t_0 = edit_timesteps[0]  # This is our starting timestep
-        total_noise_level = scheduler.get_noise_level(t_0)
+        total_noise_level = scheduler._get_variance(t_0, 0) ** 0.5
         print(f"[SDEdit] Starting from timestep t₀ = {t_0} "
               f"(noise level: {total_noise_level:.3f}, "
               f"editing steps: {len(edit_timesteps)})")
@@ -295,9 +304,10 @@ class SDEditPipeline:
             )
             
             # Single reverse step
-            current_latents = scheduler.step(
+            step_result = scheduler.step(
                 noise_pred_guided, t, current_latents, eta=eta
             )
+            current_latents = step_result.prev_sample
             
             if (i + 1) % 10 == 0 or i == len(edit_timesteps) - 1:
                 progress = (i + 1) / len(edit_timesteps) * 100
@@ -338,8 +348,8 @@ class SDEditPipeline:
         
         scheduler = self._get_scheduler(num_inference_steps)
         latents = self._encode_image(image, size=size)
-        
-        timesteps = scheduler.get_timesteps(num_inference_steps)
+
+        timesteps = scheduler.timesteps.tolist()
         t_start = max(0, len(timesteps) - int(len(timesteps) * strength))
         edit_timesteps = timesteps[t_start:]
         
@@ -374,7 +384,7 @@ class SDEditPipeline:
             
             current_latents = scheduler.step(
                 noise_pred_guided, t, current_latents, eta=eta
-            )
+            ).prev_sample
             
             # Record intermediate at regular intervals
             if (i + 1) % (len(edit_timesteps) // 5) == 0 or i == len(edit_timesteps) - 1:
