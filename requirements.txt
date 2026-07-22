@@ -1,0 +1,28 @@
+
+# =============================================================================
+# SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations
+# =============================================================================
+
+# Core ML framework
+torch>=2.0.0
+torchvision>=0.15.0
+
+# HuggingFace Diffusers (for pre-trained model loading)
+diffusers>=0.25.0
+
+# HuggingFace Transformers (for text encoder)
+transformers>=4.36.0
+
+# Speed optimizations
+accelerate>=0.25.0
+
+# Image processing
+pillow>=10.0.0
+numpy>=1.24.0
+
+# Optional: for better progress display
+# tqdm
+
+# Optional: for CUDA acceleration (install CUDA version of PyTorch)
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
