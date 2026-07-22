@@ -22,6 +22,11 @@ from PIL import Image
 from .scheduler import DDIMScheduler
 from . import utils
 
+# Patch SSL verification for HuggingFace downloads
+import os
+os.environ["HF_HUB_DISABLE_SSL_VERIFY"] = "1"
+os.environ["CURL_CA_BUNDLE"] = ""
+
 
 class SDEditPipeline:
     """Pipeline that runs the SDEdit image editing algorithm.
